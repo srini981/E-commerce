@@ -44,6 +44,10 @@ func GetAllCoupons(c *gin.Context) {
 
 func GetCouponByID(c *gin.Context) {
 	couponid, _ := c.Params.Get("ID")
+	if couponid == "" {
+		c.IndentedJSON(http.StatusInternalServerError, "failed to fetch coupon by ID ")
+		return
+	}
 	coupon := models.Coupens{}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -57,27 +61,54 @@ func GetCouponByID(c *gin.Context) {
 
 func DeleteCouponByID(c *gin.Context) {
 	couponid, _ := c.Params.Get("ID")
+	if couponid == "" {
+		c.IndentedJSON(http.StatusInternalServerError, "failed to fetch coupon by ID ")
+		return
+	}
 	coupon := models.Coupens{}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	res, err := database.Client.CouponCollection.DeleteOne(ctx, bson.M{"_id": couponid})
 	if err != nil || res.DeletedCount == 0 {
+
 		c.IndentedJSON(http.StatusInternalServerError, "failed to Delete coupon "+couponid+err.Error())
+		return
+	}
+	c.JSON(200, coupon)
+}
+
+func UpdateCouponByID(c *gin.Context) {
+	couponid, _ := c.Params.Get("ID")
+	if couponid == "" {
+		c.IndentedJSON(http.StatusInternalServerError, "failed to fetch coupon by ID ")
+		return
+	}
+	coupon := models.Coupens{}
+	if err := c.BindJSON(&coupon); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := database.Client.CouponCollection.UpdateByID(ctx, bson.M{"_id": couponid}, coupon)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, "failed to Delete coupon "+couponid+err.Error())
+		return
 	}
 	c.JSON(200, coupon)
 }
 
 func FetchAndApplyAllCouponsByCart(c *gin.Context) {
-	user, founduser := models.User{}, models.User{}
-	rescoupons := []models.Coupens{}
-	if err := c.BindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse json object" + err.Error()})
+	email, _ := c.Get("email")
+	if email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user email not found"})
 		return
 	}
+	founduser := models.User{}
+	rescoupons := []models.Coupens{}
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
-	GetUser(ctx, *user.Email)
-	res := database.Client.UserCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&founduser)
+	res := database.Client.UserCollection.FindOne(ctx, bson.M{"email": email}).Decode(&founduser)
 	if res != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user details"})
 		return
